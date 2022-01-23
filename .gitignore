@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -127,3 +128,28 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+datasets/ba_shapes/processed/data.pt
+datasets/ba_shapes/processed/pre_filter.pt
+datasets/ba_shapes/processed/pre_transform.pt
+datasets/ba_shapes/raw/BA_shapes.pkl
+.gitignore
+checkpoints/ba_lrp/GCN_2l/0/GCN_2l_best.ckpt
+checkpoints/ba_lrp/GCN_3l/0/GCN_3l_best.ckpt
+checkpoints/ba_lrp/GIN_3l/0/GIN_3l_best.ckpt
+checkpoints/ba_shapes/GCN_2l/0/GCN_2l_best.ckpt
+checkpoints/ba_shapes/GIN_2l/0/GIN_2l_best.ckpt
+checkpoints/clintox/GCN_3l/0/GCN_3l_best.ckpt
+checkpoints/clintox/GIN_3l/0/GIN_3l_best.ckpt
+checkpoints/tox21/GCN_3l/2/GCN_3l_best.ckpt
+checkpoints/tox21/GIN_3l/2/GIN_3l_best.ckpt
+Cora/processed/data.pt
+Cora/processed/pre_filter.pt
+Cora/processed/pre_transform.pt
+Cora/raw/ind.cora.allx
+Cora/raw/ind.cora.ally
+Cora/raw/ind.cora.graph
+Cora/raw/ind.cora.test.index
+Cora/raw/ind.cora.tx
+Cora/raw/ind.cora.ty
+Cora/raw/ind.cora.x
+Cora/raw/ind.cora.y
