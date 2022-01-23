@@ -32,6 +32,7 @@ class Node:
         # compute possible subgraphs by prubning one node and return nodes
         # set parent
         available_nodes_idx = np.where(np.sum(self.subgraph, axis=1))[0]
+        print("nodes to prune:", available_nodes_idx)
         successors = []
         for i in available_nodes_idx:
             new_sub = self.subgraph.copy()
@@ -60,10 +61,13 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=5, node_idx=None):
 
     leaves = []
     for i in range(M):
+        print("MCTS", i)
         current_node = root
         while current_node.nodes_left() > Nmin:
+            cn_left = current_node.nodes_left() 
             children = current_node.possible_successors()
             for child in children:
+                print(cn_left, child.nodes_left())
                 score = compute_score(edge_index, child.subgraph, child.get_node_idx(), model)
                 child.score = score
             sum_samples = sum([child.n_samples for child in children])
@@ -75,30 +79,30 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=5, node_idx=None):
 
         leaves.append(current_node)
     best_node_idx = np.argmax([l.mean for l in leaves])
-    return leaves[best_node_idx].subgraph
+    return np.where(leaves[best_node_idx].subgraph)
 
 
 # algorithm to rate subgraph, reward with shapley:
-def compute_score(edge_index, subgraph, subgraph_idx, model, L=3, T=1000):
-    print(subgraph_idx)
+def compute_score(edge_index, subgraph, subgraph_idx, model, L=1, T=10):
     subgraph_idx = torch.tensor(subgraph_idx)
     neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
 
-    all_node_indices = list(range(subgraph.shape[0]))
-    print(all_node_indices)
-    players = subgraph.clone()
+    players = subgraph.copy()
     for i in neighbors:
         players[i] = subgraph[i]
+    players = torch.tensor(players)
     pred_player = model(players, edge_index)
     shaps = []
     for i in range(T):
         # sample coalition from neighbors
-        coalition_idx = sample_coalition(all_node_indices)
-        coalition = subgraph[np.array(coalition_idx)]
-        print("coalition", coalition_idx)
+        coalition_idx = sample_coalition(neighbors.tolist())
+        coalition = np.zeros_like(subgraph)
+        for i in coalition_idx:
+            coalition[i] = subgraph[i]
+        coalition = torch.tensor(coalition)
         pred_coalition = model(coalition, edge_index)
         shap = pred_player - pred_coalition
-        shaps.append(shap)
+        shaps.append(shap.detach().numpy())
     
     return np.mean(shaps)
 
@@ -111,8 +115,6 @@ def powerset(iterable):
     return [set(c) for c in itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))]
 
 def sample_coalition(coalition_idx):
-    coalition = []
-    for i in coalition_idx:
-        if random.random() > 0.5:
-            coalition.append(i)
+    coalition_len = random.choice(list(range(1, len(coalition_idx))))
+    coalition = random.choices(coalition_idx, k=coalition_len)
     return coalition

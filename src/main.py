@@ -6,7 +6,7 @@ from custom_subgraphx import subgraphx
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-node_idx = 20
+node_idx = 55
 model, dataset = get_cora_model()
 data = dataset[0]
 logits = model(data.x, data.edge_index)
