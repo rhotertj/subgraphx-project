@@ -61,6 +61,7 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=5, node_idx=None):
 
     leaves = []
     for i in range(M):
+        #TODO: Save tree, only compute new children if not visited yet
         print("MCTS", i)
         current_node = root
         while current_node.nodes_left() > Nmin:
