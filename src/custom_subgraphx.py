@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch_geometric.utils import k_hop_subgraph
 import itertools
+from tqdm import tqdm
 import random
 
 class Node:
@@ -13,6 +14,7 @@ class Node:
         # last score
         self.score = 0
         self.parent = parent
+        self.children = {}
 
     @property
     def mean(self):
@@ -21,6 +23,13 @@ class Node:
         else:
             return self.total_reward / self.n_samples
     
+    def __repr__(self) -> str:
+        r = ""
+        r += f"Node (reward={self.mean}, sampled={self.n_samples}) with {self.nodes_left()} graph nodes and {len(self.children)} children:"
+        # for action, node in self.children.items():
+        #     r += f"{action} -> {node.__repr__()}\n"
+        return r
+
     def get_node_idx(self):
         return np.where(np.sum(self.subgraph, axis=1))[0]
 
@@ -29,15 +38,25 @@ class Node:
         return len(np.where(np.sum(self.subgraph, axis=1))[0])
 
     def possible_successors(self):
-        # compute possible subgraphs by prubning one node and return nodes
+        # compute possible subgraphs by prubning one graph node and return mcts nodes
         # set parent
         available_nodes_idx = np.where(np.sum(self.subgraph, axis=1))[0]
-        print("nodes to prune:", available_nodes_idx)
+        # print("nodes to prune:", available_nodes_idx)
         successors = []
-        for i in available_nodes_idx:
-            new_sub = self.subgraph.copy()
-            new_sub[i] = np.zeros_like(self.subgraph[i])
-            successors.append(Node(new_sub, parent=self))
+        for node_to_prune in available_nodes_idx:
+            if node_to_prune in self.children:
+                successors.append(self.children[node_to_prune])
+            else:
+                new_sub = self.subgraph.copy()
+                new_sub[node_to_prune] = np.zeros_like(self.subgraph[node_to_prune])
+                # if node already exists by different action combinations, use this node
+                # s.t. pruning 1 and 3 results in same node as pruning 3 and 1
+                for k, v in self.children.items():
+                    if (v.subgraph == new_sub).all():
+                        self.children[node_to_prune] = v
+                successor = Node(new_sub, parent=self)
+                self.children[node_to_prune] = successor
+                successors.append(successor)
         return successors
 
 
@@ -45,32 +64,36 @@ class Node:
         return l * self.score * (np.sqrt(alternative_action_samples) / (1 + self.n_samples))
 
 # main subgraphx algortihm
-def subgraphx(graph, edge_index, model, M=20, Nmin=5, node_idx=None):
+def subgraphx(graph, edge_index, model, M=20, Nmin=15, node_idx=None, L=2):
+    # graph classification
+    if node_idx is None:
+        root = Node(graph, parent=None)
+    # node classification
     if isinstance(node_idx, int):
         subgraph = np.zeros_like(graph)
-        neighbors, *_ = k_hop_subgraph(node_idx, 1, edge_index)
+        neighbors, *_ = k_hop_subgraph(node_idx, L, edge_index)
         for i in neighbors.tolist():
             subgraph[i] = graph[i]
         root = Node(subgraph, None)
-
+    # link prediction
     elif len(node_idx) == 2:
         # TODO Set subgraph of k-hop neighborhood from both nodes as root
         exit()
     else:
-        root = Node(graph, parent=None)
+        raise Exception("Invalid parameters")
+
 
     leaves = []
-    for i in range(M):
-        #TODO: Save tree, only compute new children if not visited yet
-        print("MCTS", i)
+    for i in tqdm(range(M)):
         current_node = root
+        # Still nodes to prune
         while current_node.nodes_left() > Nmin:
-            cn_left = current_node.nodes_left() 
             children = current_node.possible_successors()
             for child in children:
-                print(cn_left, child.nodes_left())
+                # shapley contribution of pruned subgraph wrt full subgraph
                 score = compute_score(edge_index, child.subgraph, child.get_node_idx(), model)
                 child.score = score
+            # mcts selection of next pruning action
             sum_samples = sum([child.n_samples for child in children])
             selection_critera = [child.mean + child.upper_bound(sum_samples) for child in children]
             next_node_idx = np.argmax(selection_critera)
@@ -79,8 +102,11 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=5, node_idx=None):
             current_node.n_samples += 1
 
         leaves.append(current_node)
+    # return subgraph with highest expected shapley contribution
+    print(root)
+
     best_node_idx = np.argmax([l.mean for l in leaves])
-    return np.where(leaves[best_node_idx].subgraph)
+    return np.unique(np.where(leaves[best_node_idx].subgraph)[0])
 
 
 # algorithm to rate subgraph, reward with shapley:
