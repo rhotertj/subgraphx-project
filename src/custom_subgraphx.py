@@ -1,4 +1,3 @@
-from platform import node
 import numpy as np
 import torch
 from torch_geometric.utils import k_hop_subgraph
@@ -44,24 +43,49 @@ class Node:
         # compute possible subgraphs by prubning one graph node and return mcts nodes
         # set parent
         available_nodes_idx = np.where(np.sum(self.subgraph, axis=1))[0]
-        print("nodes to prune:", available_nodes_idx)
+        
         successors = []
         for node_to_prune in available_nodes_idx:
+            # print("prune node:", node_to_prune, "graph sum", sum(available_nodes_idx))
             if node_to_prune in self.children:
                 successors.append(self.children[node_to_prune])
             else:
+                # print("not there")
                 new_sub = self.subgraph.copy()
                 new_sub[node_to_prune] = np.zeros_like(self.subgraph[node_to_prune])
                 # one column is one edge
-                edges_to_keep_idx = np.where(self.edges != node_to_prune)[1]
-                new_edges = self.edges.clone()[:,edges_to_keep_idx]
+                # remove edges containing pruned node
+                edges_to_keep_bool = np.all(np.array(self.edges != node_to_prune), axis=0)
+                edges_to_keep_idx = np.where(edges_to_keep_bool)[0]
+                new_edges = self.edges.clone()[:, edges_to_keep_idx]
+
+                # Check if subgraph still connected
+                all_nodes_subgraph = np.unique(new_edges)
+                first_node_subgraph, *_ = k_hop_subgraph(int(all_nodes_subgraph[0]), len(all_nodes_subgraph), new_edges)
+                # print(len(first_node_subgraph), first_node_subgraph)
+                if not len(first_node_subgraph) == len(all_nodes_subgraph):
+                    # print("Not connected anymore")
+                    # look for largest connect subgraph
+                    subgraph_sizes = []
+                    for query_node in all_nodes_subgraph:
+                        query_subgraph, *_ =  k_hop_subgraph(int(query_node), len(all_nodes_subgraph), new_edges)
+                        subgraph_sizes.append((query_node, len(query_subgraph)))
+                    largest_sg_node = sorted(subgraph_sizes, reverse=True, key=lambda nl: nl[1])[0]
+                    
+                    new_sub_nodes, *_ = k_hop_subgraph(largest_sg_node, len(all_nodes_subgraph), new_edges)
+                    # print("new sub = ", new_sub_nodes)
+                    new_sub = np.zeros_like(self.subgraph.copy())
+                    for i in new_sub_nodes.tolist():
+                        new_sub[i] = self.subgraph[i]
+
                 # if node already exists by different action combinations, use this node
                 # s.t. pruning 1 and 3 results in same node as pruning 3 and 1
-                # TODO: Check if subgraph still connected
+                successor = None
                 for k, v in self.children.items():
                     if (v.subgraph == new_sub).all():
-                        self.children[node_to_prune] = v
-                successor = Node(new_sub, new_edges, parent=self)
+                        successor = v
+                if successor is None:
+                    successor = Node(new_sub, new_edges, parent=self)
                 self.children[node_to_prune] = successor
                 successors.append(successor)
         return successors
@@ -86,9 +110,16 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
     if isinstance(node_idx, int):
         subgraph = np.zeros_like(graph)
         neighbors, *_ = k_hop_subgraph(node_idx, L, edge_index)
+        new_edges = []
         for i in neighbors.tolist():
             subgraph[i] = graph[i]
-        root = Node(subgraph, edge_index, None)
+        # allow only edges within subgraph
+        for i, edge in enumerate(edge_index.T):
+            u, v = edge
+            if u in neighbors and v in neighbors:
+                new_edges.append(edge_index.T[i])
+        new_edges = torch.stack(new_edges).T
+        root = Node(subgraph, new_edges, None)
     # link prediction
     elif len(node_idx) == 2:
         # TODO Set subgraph of k-hop neighborhood from both nodes as root
@@ -102,18 +133,16 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
         current_node = root
         # Still nodes to prune
         while current_node.nodes_left() > Nmin:
-            check_time("Start loop")
             children = current_node.possible_successors()
-            print(len(children))
-            check_time("Finish successors")
             for child in children:
                 # shapley contribution of pruned subgraph wrt full subgraph
                 score = compute_score(child.edges, child.subgraph, child.get_node_idx(), model, node_idx=node_idx)
                 child.score = score
-            check_time("Score for all children")
+                print(score)
             # mcts selection of next pruning action
             sum_samples = sum([child.n_samples for child in children])
             selection_critera = [child.mean + child.upper_bound(sum_samples) for child in children]
+            print(selection_critera)
             next_node_idx = np.argmax(selection_critera)
             current_node = children[next_node_idx]
         iter_node = current_node
@@ -134,8 +163,12 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
 # algorithm to rate subgraph, reward with shapley:
 def compute_score(edge_index, subgraph, subgraph_idx, model, L=1, T=100, node_idx=None):
     subgraph_idx = torch.tensor(subgraph_idx)
-    neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
-    print("nb",len(neighbors))
+    try:
+        neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
+    except Exception as e:
+        print(e)
+        print(subgraph_idx, subgraph_idx.shape)
+        print(edge_index, edge_index.shape)
     shaps = []
     for i in range(T):
         # sample coalition from neighbors
