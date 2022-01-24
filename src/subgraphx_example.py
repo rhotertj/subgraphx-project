@@ -47,7 +47,9 @@ from dig.xgraph.method.subgraphx import find_closest_node_result
 
 # Visualization
 max_nodes = 5
-node_idx = node_indices[20]
+# 20 is long
+# 3 is short
+node_idx = node_indices[3]
 print(f'explain graph node {node_idx}')
 data.to(device)
 logits = model(data.x, data.edge_index)

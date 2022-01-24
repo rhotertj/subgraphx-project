@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch_geometric.nn import GCNConv
-from torch_geometric.datasets import Planetoid
+from torch_geometric.datasets import Planetoid, KarateClub
 import torch_geometric.transforms as T
 from tqdm import tqdm
 
@@ -34,11 +34,13 @@ class GCN(torch.nn.Module):
             optimizer.step()
 
 
-def get_cora_model():
+def get_cora_model(dataset):
 
-    dataset = "Cora"
-    transform = T.Compose([T.GCNNorm(), T.NormalizeFeatures()])
-    dataset = Planetoid("./", dataset, transform=transform)
+    if dataset == "Cora":
+        transform = T.Compose([T.GCNNorm(), T.NormalizeFeatures()])
+        dataset = Planetoid("./", dataset, transform=transform)
+    else:
+        dataset = KarateClub()
 
     data = dataset[0]
 
