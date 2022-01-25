@@ -12,9 +12,16 @@ node_idx = 11
 model, dataset = get_cora_model("karate")
 data = dataset[0]
 logits = model(data.x, data.edge_index)
-prediction = logits[node_idx].argmax(-1).item()
+prediction = logits[node_idx]
+print("Prediction:", prediction)
 result = subgraphx(data.x, data.edge_index, model, node_idx=node_idx, M=40, Nmin=8, L=2)
 print(result)
+node_features = torch.zeros_like(data.x)
+for n in result:
+    node_features[n] = data.x[n]
+logits = model(node_features, data.edge_index)
+prediction = logits[node_idx]
+print("Prediction", prediction)
 # # Explain with subgraphx library
 # explainer = SubgraphX(model, num_classes=dataset.num_classes, device=device, explain_graph=False)
 # _, explanation_results, related_preds = explainer(data.x, data.edge_index, node_idx=node_idx, max_nodes=8)

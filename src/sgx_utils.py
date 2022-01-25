@@ -11,7 +11,7 @@ def largest_connected_subgraph(nodes, edges):
     new_nodes = nodes
     new_edges = edges
     if not len(first_node_subgraph) == len(all_nodes_subgraph):
-        print("Not connected anymore")
+        # print("Not connected anymore")
         # look for largest connected subgraph
         subgraph_sizes = []
         for query_node in all_nodes_subgraph:

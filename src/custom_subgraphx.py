@@ -1,9 +1,7 @@
 import numpy as np
 import torch
 from torch_geometric.utils import k_hop_subgraph
-import itertools
 from tqdm import tqdm
-import random
 import time
 
 from sgx_utils import (
@@ -36,8 +34,6 @@ class Node:
     def __repr__(self) -> str:
         r = ""
         r += f"Node (reward={self.mean}, sampled={self.n_samples}) with {self.nodes_left()} graph nodes and {len(self.children)} children:"
-        # for action, node in self.children.items():
-        #     r += f"{action} -> {node.__repr__()}\n"
         return r
 
     def get_node_idx(self):
@@ -59,7 +55,7 @@ class Node:
                 successors.append(self.children[node_to_prune])
             else:
                 # print("not there")
-                print("NODE TO PRUNE", node_to_prune, available_nodes_idx)
+                # print("NODE TO PRUNE", node_to_prune, available_nodes_idx)
                 new_node_features, new_edges = subgraph_by_node_removal(self.node_features, self.edges, node_to_prune)
                 # Check if subgraph still connected
                 new_node_features, new_edges = largest_connected_subgraph(new_node_features, new_edges)
@@ -68,7 +64,6 @@ class Node:
                 successor = None
                 for k, v in self.children.items():
                     if (v.node_features == new_node_features).all():
-                        print("no new node")
                         successor = v
                 if successor is None:
                     successor = Node(new_node_features, new_edges, parent=self)
@@ -113,11 +108,11 @@ def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1
                 # shapley contribution of pruned subgraph wrt full subgraph
                 score = compute_score(child.edges, child.node_features, child.get_node_idx(), model, node_idx=node_idx)
                 child.score = score
-                print(score)
+                # print(score)
             # mcts selection of next pruning action
             sum_samples = sum([child.n_samples for child in children])
             selection_critera = [child.mean + child.upper_bound(sum_samples) for child in children]
-            print(selection_critera)
+            # print(selection_critera)
             next_node_idx = np.argmax(selection_critera)
             current_node = children[next_node_idx]
         iter_node = current_node
