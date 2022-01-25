@@ -16,8 +16,8 @@ from sgx_utils import (
 
 class Node:
 
-    def __init__(self, graph, edges, parent) -> None:
-        self.subgraph = graph
+    def __init__(self, nodes, edges, parent) -> None:
+        self.node_features = nodes
         self.edges = edges
         self.total_reward = 0
         self.n_samples  = 0
@@ -41,16 +41,16 @@ class Node:
         return r
 
     def get_node_idx(self):
-        return np.where(np.sum(self.subgraph, axis=1))[0]
+        return np.where(np.sum(self.node_features, axis=1))[0]
 
     def nodes_left(self):
         # Return number of possible nodes to prune
-        return len(np.where(np.sum(self.subgraph, axis=1))[0])
+        return len(np.where(np.sum(self.node_features, axis=1))[0])
 
     def possible_successors(self):
         # compute possible subgraphs by prubning one graph node and return mcts nodes
         # set parent
-        available_nodes_idx = np.where(np.sum(self.subgraph, axis=1))[0]
+        available_nodes_idx = np.where(np.sum(self.node_features, axis=1))[0]
         
         successors = []
         for node_to_prune in available_nodes_idx:
@@ -60,18 +60,18 @@ class Node:
             else:
                 # print("not there")
                 print("NODE TO PRUNE", node_to_prune, available_nodes_idx)
-                new_sub, new_edges = subgraph_by_node_removal(self.subgraph, self.edges, node_to_prune)
+                new_node_features, new_edges = subgraph_by_node_removal(self.node_features, self.edges, node_to_prune)
                 # Check if subgraph still connected
-                new_sub, new_edges = largest_connected_subgraph(new_sub, new_edges)
+                new_node_features, new_edges = largest_connected_subgraph(new_node_features, new_edges)
                 # if node already exists by different action combinations, use this node
                 # s.t. pruning 1 and 3 results in same node as pruning 3 and 1
                 successor = None
                 for k, v in self.children.items():
-                    if (v.subgraph == new_sub).all():
+                    if (v.node_features == new_node_features).all():
                         print("no new node")
                         successor = v
                 if successor is None:
-                    successor = Node(new_sub, new_edges, parent=self)
+                    successor = Node(new_node_features, new_edges, parent=self)
                 self.children[node_to_prune] = successor
                 successors.append(successor)
         return successors
@@ -88,13 +88,13 @@ def check_time(location):
     globals()["global_time"] = now
 
 # main subgraphx algortihm
-def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
+def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
     # graph classification
     if node_idx is None:
-        root = Node(graph, edge_index, parent=None)
+        root = Node(node_features, edge_index, parent=None)
     # node classification
     if isinstance(node_idx, int):
-        nodes, edges = khop_node_edges(node_idx, graph, edge_index, L)
+        nodes, edges = khop_node_edges(node_idx, node_features, edge_index, L)
         root = Node(nodes, edges, None)
     # link prediction
     elif len(node_idx) == 2:
@@ -111,7 +111,7 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
             children = current_node.possible_successors()
             for child in children:
                 # shapley contribution of pruned subgraph wrt full subgraph
-                score = compute_score(child.edges, child.subgraph, child.get_node_idx(), model, node_idx=node_idx)
+                score = compute_score(child.edges, child.node_features, child.get_node_idx(), model, node_idx=node_idx)
                 child.score = score
                 print(score)
             # mcts selection of next pruning action
@@ -132,11 +132,11 @@ def subgraphx(graph, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):
     # return subgraph with highest expected shapley contribution
     [print(c) for c in root.children.values()]
     best_node_idx = np.argmax([l.mean for l in leaves])
-    return np.unique(np.where(leaves[best_node_idx].subgraph)[0])
+    return np.unique(np.where(leaves[best_node_idx].node_features)[0])
 
 
 # algorithm to rate subgraph, reward with shapley:
-def compute_score(edge_index, subgraph, subgraph_idx, model, L=1, T=100, node_idx=None):
+def compute_score(edge_index, node_features, subgraph_idx, model, L=1, T=100, node_idx=None):
     subgraph_idx = torch.tensor(subgraph_idx)
     try:
         neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
@@ -150,17 +150,17 @@ def compute_score(edge_index, subgraph, subgraph_idx, model, L=1, T=100, node_id
         # sample coalition from neighbors
         coalition_idx = sample_coalition(neighbors.tolist())
         # set features to zero except for coalition and subgraph
-        sg_and_coal = subgraph.copy()
+        sg_and_coal = node_features.copy()
         for i in coalition_idx:
-            sg_and_coal[i] = subgraph[i]
+            sg_and_coal[i] = node_features[i]
         sg_and_coal = torch.tensor(sg_and_coal)
         pred_player = torch.max(model(sg_and_coal, edge_index), dim=1)[0]
         if not node_idx is None:
             pred_player = pred_player[node_idx]
         # set features to zero except for coalition
-        coalition = np.zeros_like(subgraph)
+        coalition = np.zeros_like(node_features)
         for i in coalition_idx:
-            coalition[i] = subgraph[i]
+            coalition[i] = node_features[i]
         coalition = torch.tensor(coalition)
         pred_coalition = torch.max(model(coalition, edge_index), dim=1)[0]
         if not node_idx is None:

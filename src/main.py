@@ -17,6 +17,6 @@ result = subgraphx(data.x, data.edge_index, model, node_idx=node_idx, M=40, Nmin
 print(result)
 # # Explain with subgraphx library
 # explainer = SubgraphX(model, num_classes=dataset.num_classes, device=device, explain_graph=False)
-# _, explanation_results, related_preds = explainer(data.x, data.edge_index, node_idx=node_idx, max_nodes=4)
-# result = find_closest_node_result(explanation_results[prediction], max_nodes=4)
+# _, explanation_results, related_preds = explainer(data.x, data.edge_index, node_idx=node_idx, max_nodes=8)
+# result = find_closest_node_result(explanation_results[prediction], max_nodes=8)
 # print(result)
