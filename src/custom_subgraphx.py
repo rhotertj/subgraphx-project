@@ -50,12 +50,9 @@ class Node:
         
         successors = []
         for node_to_prune in available_nodes_idx:
-            # print("prune node:", node_to_prune, "graph sum", sum(available_nodes_idx))
             if node_to_prune in self.children:
                 successors.append(self.children[node_to_prune])
             else:
-                # print("not there")
-                # print("NODE TO PRUNE", node_to_prune, available_nodes_idx)
                 new_node_features, new_edges = subgraph_by_node_removal(self.node_features, self.edges, node_to_prune)
                 # Check if subgraph still connected
                 new_node_features, new_edges = largest_connected_subgraph(new_node_features, new_edges)
@@ -108,11 +105,10 @@ def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1
                 # shapley contribution of pruned subgraph wrt full subgraph
                 score = compute_score(child.edges, child.node_features, child.get_node_idx(), model, node_idx=node_idx)
                 child.score = score
-                # print(score)
             # mcts selection of next pruning action
             sum_samples = sum([child.n_samples for child in children])
             selection_critera = [child.mean + child.upper_bound(sum_samples) for child in children]
-            # print(selection_critera)
+
             next_node_idx = np.argmax(selection_critera)
             current_node = children[next_node_idx]
         iter_node = current_node
@@ -125,7 +121,6 @@ def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1
 
         leaves.append(current_node)
     # return subgraph with highest expected shapley contribution
-    [print(c) for c in root.children.values()]
     best_node_idx = np.argmax([l.mean for l in leaves])
     return np.unique(np.where(leaves[best_node_idx].node_features)[0])
 
@@ -133,13 +128,8 @@ def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1
 # algorithm to rate subgraph, reward with shapley:
 def compute_score(edge_index, node_features, subgraph_idx, model, L=1, T=100, node_idx=None):
     subgraph_idx = torch.tensor(subgraph_idx)
-    try:
-        neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
-    except Exception as e:
-        print(e)
-        print(subgraph_idx, subgraph_idx.shape)
-        print(edge_index, edge_index.shape)
-        print(node_idx)
+    neighbors, *_ = k_hop_subgraph(subgraph_idx, L, edge_index)
+
     shaps = []
     for i in range(T):
         # sample coalition from neighbors
