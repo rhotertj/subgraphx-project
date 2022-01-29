@@ -82,10 +82,6 @@ def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1
     if isinstance(node_idx, int):
         nodes, edges = khop_node_edges(node_idx, node_features, edge_index, L)
         root = Node(nodes, edges, None)
-    # link prediction
-    elif len(node_idx) == 2:
-        # TODO Set subgraph of k-hop neighborhood from both nodes as root
-        exit()
     else:
         raise Exception("Invalid parameters")
 
