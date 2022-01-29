@@ -72,12 +72,6 @@ class Node:
     def upper_bound(self, alternative_action_samples, l=5):
         return l * self.score * (np.sqrt(alternative_action_samples) / (1 + self.n_samples))
 
-global_time = 0
-def check_time(location):
-    global_time = globals()["global_time"]
-    now = time.time()
-    print(f"{location} : {now - global_time}")
-    globals()["global_time"] = now
 
 # main subgraphx algortihm
 def subgraphx(node_features, edge_index, model, M=20, Nmin=4, node_idx=None, L=1):

@@ -4,9 +4,11 @@ from dig.xgraph.method import SubgraphX, PGExplainer
 from dig.xgraph.method.subgraphx import find_closest_node_result
 from torch_geometric.nn import GNNExplainer
 import torch
+import numpy as np
 from custom_subgraphx import subgraphx
+from sgx_utils import subgraph_by_node_removal
 
-
+# Fidelity: Remove important features and expect large change in prediction
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # 55 long
 # 20 short
@@ -14,19 +16,17 @@ node_idx = 11
 model, dataset = get_cora_model("karate")
 data = dataset[0]
 logits = model(data.x, data.edge_index)
-prediction1 = logits[node_idx]
+prediction1 = torch.exp(logits[node_idx])
 print("Prediction:", prediction1)
 
 fids = []
 for _ in range(5):
-    result = subgraphx(data.x, data.edge_index, model, node_idx=node_idx, M=10, Nmin=8, L=2)
-    print(result)
-
-    node_features = data.x.clone()
-    for n in result:
-        node_features[n] = torch.zeros_like(data.x[n])
-    logits = model(node_features, data.edge_index)
-    prediction2 = logits[node_idx]
+    result = subgraphx(data.x, data.edge_index, model, node_idx=node_idx, M=40, Nmin=8, L=2)
+    nodes, edges = data.x.clone().numpy(), data.edge_index.clone()
+    for node_to_remove in result:
+        nodes, edges = subgraph_by_node_removal(nodes, edges, node_to_remove)
+    logits = model(torch.tensor(nodes), edges)
+    prediction2 = torch.exp(logits[node_idx])
     print("Prediction", prediction2)
 
     #c = prediction1.argmax(-1)
@@ -36,18 +36,37 @@ for _ in range(5):
 
 # print("Fidelity mean:", sum(fids) / len(fids))
 print(fids)
-print(torch.stack(fids).mean(dim=0))
+print("Fidelity subgraphx =" ,torch.stack(fids).mean(dim=0))
 
 ### explain with pyg
 explainer = GNNExplainer(model, epochs=200, return_type='log_prob')
 
-# Node of interest
+gnn_fids = []
+for _ in range(5):
+    node_feat_mask, edge_mask = explainer.explain_node(node_idx, data.x, data.edge_index)
+    print(data.edge_index.shape)
+    masked_x = data.x.clone()
+    for i, f in enumerate(node_feat_mask):
+        if f > 0.5: # above 0.5 important
+            masked_x[:, i] = torch.zeros_like(data.x[:, i])
 
-node_feat_mask, edge_mask = explainer.explain_node(node_idx, data.x, data.edge_index)
+    masked_edges = []
+    edge_mask = edge_mask.reshape(1, -1).T
 
-print("node_feat_mask", node_feat_mask)
-print("edge_mask", edge_mask)
+    for i, e in enumerate(edge_mask):
+        if e.item() < 0.5: # above 0.5 important
+            masked_edges.append(data.edge_index.T[i])
 
+    masked_edges = torch.stack(masked_edges).T
+    print(masked_edges.shape)
+    logits = model(masked_x, masked_edges)
+    prediction3 = torch.exp(logits[node_idx])
+    fidelity = prediction1 - prediction3
+    print("Fidelity", fidelity)
+    gnn_fids.append(fidelity)
+
+print(gnn_fids)
+print("Fidelity gnn =", torch.stack(gnn_fids).mean(dim=0))
 
 
 # # Explain with subgraphx library
