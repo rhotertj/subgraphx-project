@@ -44,7 +44,7 @@ class Node:
         return len(np.where(np.sum(self.node_features, axis=1))[0])
 
     def possible_successors(self):
-        # compute possible subgraphs by prubning one graph node and return mcts nodes
+        # compute possible subgraphs by pruning one graph node and return mcts nodes
         # set parent
         available_nodes_idx = np.where(np.sum(self.node_features, axis=1))[0]
         
